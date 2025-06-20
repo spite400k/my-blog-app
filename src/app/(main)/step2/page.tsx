@@ -4,38 +4,63 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function BlogStep2Page() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const draftIdParam = searchParams.get('id')
+
   const [userId, setUserId] = useState<string | null>(null)
-  const [draftId, setDraftId] = useState<string | null>(null)
+  const [draftId, setDraftId] = useState<string | null>(draftIdParam)
   const [headings, setHeadings] = useState([''])
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUserAndDraft = async () => {
       const { data } = await supabase.auth.getUser()
-      if (!data.user) return router.push('/login')
+      if (!data.user) {
+        router.push('/login')
+        return
+      }
       setUserId(data.user.id)
 
-      // 最新のドラフトを取得（仮: 自分の最新1件を取得）
-      const { data: drafts } = await supabase
-        .from('trn_blog_drafts')
-        .select('id')
-        .eq('user_id', data.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
+      if (draftIdParam) {
+        // id指定あれば読み込み
+        const { data: draft, error } = await supabase
+          .from('trn_blog_drafts')
+          .select('headings')
+          .eq('id', draftIdParam)
+          .single()
 
-      if (drafts && drafts.length > 0) {
-        setDraftId(drafts[0].id)
+        if (error) {
+          setError(error.message)
+        } else {
+          setHeadings(draft.headings && draft.headings.length > 0 ? draft.headings : [''])
+          setDraftId(draftIdParam)
+        }
       } else {
-        setError('ドラフトが見つかりません')
+        // id指定なければ最新ドラフト取得（自分の最新1件）
+        const { data: drafts, error } = await supabase
+          .from('trn_blog_drafts')
+          .select('id, headings')
+          .eq('user_id', data.user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (error || !drafts || drafts.length === 0) {
+          setError('ドラフトが見つかりません')
+        } else {
+          setDraftId(drafts[0].id)
+          setHeadings(drafts[0].headings && drafts[0].headings.length > 0 ? drafts[0].headings : [''])
+        }
       }
+      setLoading(false)
     }
-    loadUser()
-  }, [])
+    loadUserAndDraft()
+  }, [draftIdParam, router])
 
   const handleHeadingChange = (index: number, value: string) => {
     const updated = [...headings]
@@ -67,9 +92,11 @@ export default function BlogStep2Page() {
     if (error) {
       setError(error.message)
     } else {
-      router.push('/step3')
+      router.push(`/step3?id=${draftId}`)
     }
   }
+
+  if (loading) return <p className="p-4">読み込み中...</p>
 
   return (
     <div className="max-w-2xl mx-auto p-4">

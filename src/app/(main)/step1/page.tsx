@@ -4,23 +4,49 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function BlogStep1Page() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const draftId = searchParams.get('id')
+
   const [userId, setUserId] = useState<string | null>(null)
   const [title, setTitle] = useState('')
   const [audience, setAudience] = useState('')
   const [keywords, setKeywords] = useState(['', '', ''])
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) router.push('/login')
-      else setUserId(data.user.id)
-    })
-  }, [])
+    const loadUserAndDraft = async () => {
+      const { data } = await supabase.auth.getUser()
+      if (!data.user) {
+        router.push('/login')
+        return
+      }
+      setUserId(data.user.id)
+
+      if (draftId) {
+        const { data: draft, error } = await supabase
+          .from('trn_blog_drafts')
+          .select('title, audience, keywords')
+          .eq('id', draftId)
+          .single()
+
+        if (error) {
+          setError(error.message)
+        } else if (draft) {
+          setTitle(draft.title || '')
+          setAudience(draft.audience || '')
+          setKeywords(draft.keywords?.length ? draft.keywords : ['', '', ''])
+        }
+      }
+      setLoading(false)
+    }
+    loadUserAndDraft()
+  }, [draftId, router])
 
   const handleKeywordChange = (index: number, value: string) => {
     const newKeywords = [...keywords]
@@ -32,19 +58,47 @@ export default function BlogStep1Page() {
     if (!title.trim()) return setError('ブログタイトルを入力してください')
     if (!userId) return setError('ログイン情報を取得できません')
 
-    const { error } = await supabase.from('trn_blog_drafts').insert({
-      user_id: userId,
-      title,
-      audience,
-      keywords: keywords.filter(k => k.trim() !== '')
-    })
+    if (draftId) {
+      // 更新
+      const { error } = await supabase
+        .from('trn_blog_drafts')
+        .update({
+          title,
+          audience,
+          keywords: keywords.filter(k => k.trim() !== ''),
+        })
+        .eq('id', draftId)
 
-    if (error) {
-      setError(error.message)
+      if (error) {
+        setError(error.message)
+        return
+      }
     } else {
-      router.push('/step2')
+      // 新規作成
+      const { data, error } = await supabase
+        .from('trn_blog_drafts')
+        .insert({
+          user_id: userId,
+          title,
+          audience,
+          keywords: keywords.filter(k => k.trim() !== ''),
+        })
+        .select('id')
+        .single()
+
+      if (error || !data) {
+        setError(error?.message || '新規作成に失敗しました')
+        return
+      }
+      router.push(`/step2?id=${data.id}`)
+      return
     }
+
+    // 更新後はstep2に遷移
+    router.push(`/step2?id=${draftId}`)
   }
+
+  if (loading) return <p className="p-4">読み込み中...</p>
 
   return (
     <div className="max-w-2xl mx-auto p-4">

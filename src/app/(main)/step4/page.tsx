@@ -4,37 +4,63 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function BlogStep4Page() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const draftIdParam = searchParams.get('id')
+
   const [userId, setUserId] = useState<string | null>(null)
-  const [draftId, setDraftId] = useState<string | null>(null)
+  const [draftId, setDraftId] = useState<string | null>(draftIdParam)
   const [content, setContent] = useState('')
   const [error, setError] = useState('')
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const loadUser = async () => {
+    const loadUserAndDraft = async () => {
       const { data } = await supabase.auth.getUser()
-      if (!data.user) return router.push('/login')
+      if (!data.user) {
+        router.push('/login')
+        return
+      }
       setUserId(data.user.id)
 
-      const { data: drafts } = await supabase
-        .from('trn_blog_drafts')
-        .select('id')
-        .eq('user_id', data.user.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
+      if (draftIdParam) {
+        // id指定あり：対象ドラフトを取得
+        const { data: draft, error } = await supabase
+          .from('trn_blog_drafts')
+          .select('content')
+          .eq('id', draftIdParam)
+          .single()
 
-      if (drafts && drafts.length > 0) {
-        setDraftId(drafts[0].id)
+        if (error) {
+          setError(error.message)
+        } else {
+          setContent(draft.content || '')
+          setDraftId(draftIdParam)
+        }
       } else {
-        setError('ドラフトが見つかりません')
+        // id指定なし：ログインユーザーの最新ドラフト取得
+        const { data: drafts, error } = await supabase
+          .from('trn_blog_drafts')
+          .select('id, content')
+          .eq('user_id', data.user.id)
+          .order('created_at', { ascending: false })
+          .limit(1)
+
+        if (error || !drafts || drafts.length === 0) {
+          setError('ドラフトが見つかりません')
+        } else {
+          setDraftId(drafts[0].id)
+          setContent(drafts[0].content || '')
+        }
       }
+      setLoading(false)
     }
-    loadUser()
-  }, [])
+    loadUserAndDraft()
+  }, [draftIdParam, router])
 
   const handleSubmit = async () => {
     if (!draftId) return setError('下書きIDが見つかりません')
@@ -52,6 +78,8 @@ export default function BlogStep4Page() {
       router.push('/')
     }
   }
+
+  if (loading) return <p className="p-4">読み込み中...</p>
 
   return (
     <div className="max-w-2xl mx-auto p-4">
