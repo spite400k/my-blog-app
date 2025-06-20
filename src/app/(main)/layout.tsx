@@ -1,5 +1,5 @@
 'use client'
-import { ReactNode } from 'react'
+import { ReactNode, Suspense } from 'react'
 import Link from 'next/link'
 
 export default function MainLayout({ children }: { children: ReactNode }) {
@@ -12,7 +12,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           </Link>
         </h1>
       </header>
-      <main className="p-4">{children}</main>
+      <main className="p-4"><Suspense>{children}</Suspense></main>
     </div>
   )
 }
