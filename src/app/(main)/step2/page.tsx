@@ -1,6 +1,3 @@
-// ================================
-// src/app/(main)/step2/page.tsx
-// ================================
 'use client'
 
 import { useState, useEffect } from 'react'

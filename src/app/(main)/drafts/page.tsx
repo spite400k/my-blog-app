@@ -1,4 +1,3 @@
-// src/app/(main)/drafts/page.tsx
 'use client'
 
 import { useState, useEffect } from 'react'
