@@ -19,6 +19,9 @@ export default function BlogStep1Page() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
+  const [recommendSets, setRecommendSets] = useState<string[][]>([])
+  const [showModal, setShowModal] = useState(false)
+
   useEffect(() => {
     const loadUserAndDraft = async () => {
       const { data } = await supabase.auth.getUser()
@@ -98,6 +101,44 @@ export default function BlogStep1Page() {
     router.push(`/step2?id=${draftId}`)
   }
 
+  const handleRecommend = async () => {
+    setError('')
+
+    if (!title || !audience) {
+        return setError('タイトルと想定読者を入力してください')
+    }
+
+    try {
+        const res = await fetch('/api/recommend/keywords', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, audience })
+        })
+        const data = await res.json()
+        if (!res.ok) {
+            throw new Error(data.error || 'キーワードの提案に失敗しました')
+        }
+        if (!data.result) {
+            throw new Error('結果が見つかりません')
+        }
+        // ChatGPTの回答はJSON文字列の可能性があるため、構文解析する
+        const parsed = JSON.parse(data.result)
+
+        if (!parsed.keyword_sets || !Array.isArray(parsed.keyword_sets)) {
+        throw new Error('形式が正しくありません')
+        }
+
+        setRecommendSets(parsed.keyword_sets)
+        setShowModal(true)
+    } catch (e) {
+        setError('キーワードの提案に失敗しました')
+        console.error(e)
+    }
+}
+
+
+
+
   if (loading) return <p className="p-4">読み込み中...</p>
 
   return (
@@ -138,9 +179,52 @@ export default function BlogStep1Page() {
             placeholder={`キーワード${i + 1}`}
           />
         ))}
+        {/* 「おすすめを生成」ボタン追加 */}  
+        <button
+            onClick={handleRecommend}
+            className="mb-4 bg-gray-300 text-black px-4 py-2 rounded"
+            >
+            おすすめのキーワードを生成
+        </button>
+
       </div>
 
       {error && <p className="text-red-500 mb-4">{error}</p>}
+        {showModal && (
+        <div
+            className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+            onClick={() => setShowModal(false)} // 外側クリックで閉じる
+        >
+            <div
+            className="bg-white p-6 rounded-lg w-full max-w-lg shadow-lg"
+            onClick={(e) => e.stopPropagation()} // 内側クリックは無視
+            >
+            <h2 className="text-lg font-bold mb-4">おすすめのキーワード</h2>
+            <p className="text-sm text-gray-500 mb-2">1セットをクリックして適用</p>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+                {recommendSets.map((set, i) => (
+                <button
+                    key={i}
+                    onClick={() => {
+                    setKeywords(set)
+                    setShowModal(false)
+                    }}
+                    className="w-full text-left border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded"
+                >
+                    {set.join(' / ')}
+                </button>
+                ))}
+            </div>
+            <button
+                onClick={() => setShowModal(false)}
+                className="mt-4 text-sm bg-gray-300 text-black  rounded hover:bg-gray-200 px-4 py-2"
+            >
+                キャンセル
+            </button>
+            </div>
+        </div>
+        )}
+
 
       <button onClick={handleNext} className="bg-blue-500 text-white px-4 py-2 rounded">
         次へ（ステップ2）

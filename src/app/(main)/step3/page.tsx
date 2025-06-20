@@ -93,9 +93,25 @@ export default function BlogStep3Page() {
 
       {error && <p className="text-red-500 mt-2">{error}</p>}
 
-      <button onClick={handleNext} className="mt-4 bg-blue-500 text-white px-4 py-2 rounded">
-        次へ（ステップ4）
-      </button>
+      <div className="flex gap-4 mt-4">
+        {/* 戻るボタン */}
+        <button
+          onClick={() => {
+            if (draftId) router.push(`/step2?id=${draftId}`)
+          }}
+          className="bg-gray-400 text-white px-4 py-2 rounded"
+        >
+          ステップ2に戻る
+        </button>
+
+        {/* 次へボタン */}
+        <button
+          onClick={handleNext}
+          className="bg-blue-500 text-white px-4 py-2 rounded"
+        >
+          次へ（ステップ4）
+        </button>
+      </div>
     </div>
   )
 }
