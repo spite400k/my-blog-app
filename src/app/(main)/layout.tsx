@@ -1,4 +1,4 @@
-// src/app/(main)/layout.tsx
+'use client'
 import { ReactNode } from 'react'
 import Link from 'next/link'
 
