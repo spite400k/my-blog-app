@@ -1,45 +1,55 @@
+// ================================
+// src/app/(main)/page.tsx
+// ================================
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 
 export default function TopPage() {
-  const [user, setUser] = useState(null)
   const router = useRouter()
+  const [userId, setUserId] = useState<string | null>(null)
 
   useEffect(() => {
-    const getUser = async () => {
+    const checkAuth = async () => {
       const { data } = await supabase.auth.getUser()
       if (!data.user) {
         router.push('/login')
       } else {
-        setUser(data.user)
+        setUserId(data.user.id)
       }
     }
-    getUser()
-  }, [])
+    checkAuth()
+  }, [router])
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut()
-    router.push('/login')
+  const handleStart = () => {
+    router.push('/step1')
+  }
+
+  const handleViewDrafts = () => {
+    router.push('/drafts')
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="w-64 bg-gray-800 text-white p-4">
-        <h2 className="text-xl font-bold mb-4">メニュー</h2>
-        <ul>
-          <li className="mb-2">🏠 ダッシュボード</li>
-          <li className="mb-2">✏️ ブログを書く</li>
-          <li className="mb-2">📚 記事一覧</li>
-        </ul>
-      </aside>
-      <main className="flex-1 p-6">
-        <h1 className="text-2xl mb-4">TOPページ</h1>
-        {user && <p>ようこそ、{user.email} さん</p>}
-        <button onClick={handleLogout} className="mt-4 p-2 bg-red-500 text-white">ログアウト</button>
-      </main>
+    <div className="max-w-xl mx-auto p-4 text-center">
+      <h1 className="text-3xl font-bold mb-6">ブログ作成アプリへようこそ</h1>
+      <p className="mb-6">初心者でも簡単にブログが書けるステップ形式のサポートアプリです。</p>
+      <div className="space-y-4">
+        <button
+          onClick={handleStart}
+          className="bg-blue-500 text-white px-6 py-3 rounded-lg text-lg"
+        >
+          はじめる（ステップ1へ）
+        </button>
+        <br />
+        <button
+          onClick={handleViewDrafts}
+          className="bg-gray-600 text-white px-6 py-3 rounded-lg text-lg"
+        >
+          下書きを見る
+        </button>
+      </div>
     </div>
   )
 }
