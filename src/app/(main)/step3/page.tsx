@@ -1,70 +1,92 @@
-// ================================
-// src/app/(main)/step3/page.tsx
-// ================================
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 
 export default function BlogStep3Page() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const draftIdParam = searchParams.get('id')
+  const draftId = searchParams.get('id')
 
   const [userId, setUserId] = useState<string | null>(null)
-  const [draftId, setDraftId] = useState<string | null>(draftIdParam)
   const [summary, setSummary] = useState('')
-  const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const [draftInfo, setDraftInfo] = useState<{
+    title: string
+    audience: string
+    keywords: string[]
+    headings: string[]
+  } | null>(null)
 
+  const [generating, setGenerating] = useState(false)
+
+  // ユーザーと下書きを取得
   useEffect(() => {
-    const loadUserAndDraft = async () => {
-      const { data } = await supabase.auth.getUser()
-      if (!data.user) {
-        router.push('/login')
+    const loadDraft = async () => {
+      const { data: authData } = await supabase.auth.getUser()
+      if (!authData.user) return router.push('/login')
+      setUserId(authData.user.id)
+
+      if (!draftId) {
+        setError('ドラフトIDが指定されていません')
+        setLoading(false)
         return
       }
-      setUserId(data.user.id)
 
-      if (draftIdParam) {
-        // id指定あり：そのドラフトを取得
-        const { data: draft, error } = await supabase
-          .from('trn_blog_drafts')
-          .select('summary')
-          .eq('id', draftIdParam)
-          .single()
+      const { data, error } = await supabase
+        .from('trn_blog_drafts')
+        .select('title, audience, keywords, headings, summary')
+        .eq('id', draftId)
+        .single()
 
-        if (error) {
-          setError(error.message)
-        } else {
-          setSummary(draft.summary || '')
-          setDraftId(draftIdParam)
-        }
-      } else {
-        // id指定なし：最新ドラフト取得
-        const { data: drafts, error } = await supabase
-          .from('trn_blog_drafts')
-          .select('id, summary')
-          .eq('user_id', data.user.id)
-          .order('created_at', { ascending: false })
-          .limit(1)
-
-        if (error || !drafts || drafts.length === 0) {
-          setError('ドラフトが見つかりません')
-        } else {
-          setDraftId(drafts[0].id)
-          setSummary(drafts[0].summary || '')
-        }
+      if (error || !data) {
+        setError(error?.message || '下書きの読み込みに失敗しました')
+        setLoading(false)
+        return
       }
+
+      setDraftInfo({
+        title: data.title || '',
+        audience: data.audience || '',
+        keywords: data.keywords || [],
+        headings: data.headings || [],
+      })
+      setSummary(data.summary || '')
       setLoading(false)
     }
-    loadUserAndDraft()
-  }, [draftIdParam, router])
+
+    loadDraft()
+  }, [draftId, router])
+
+  const handleGenerate = async () => {
+    if (!draftInfo) return
+    setGenerating(true)
+    setError('')
+
+    try {
+      const res = await fetch('/api/recommend/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(draftInfo),
+      })
+      const data = await res.json()
+
+      if (!res.ok || !data.summary) {
+        throw new Error(data.error || 'あらすじの生成に失敗しました')
+      }
+
+      setSummary(data.summary)
+    } catch (e) {
+      setError((e as Error).message || 'API呼び出し失敗')
+    } finally {
+      setGenerating(false)
+    }
+  }
 
   const handleNext = async () => {
-    if (!draftId) return setError('下書きIDが見つかりません')
-    if (!summary.trim()) return setError('あらすじを入力してください')
+    if (!draftId) return
 
     const { error } = await supabase
       .from('trn_blog_drafts')
@@ -82,29 +104,34 @@ export default function BlogStep3Page() {
 
   return (
     <div className="max-w-2xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">ステップ3：記事のあらすじを作成</h1>
+      <h1 className="text-2xl font-bold mb-6">ステップ3：記事のあらすじを作成しましょう</h1>
+
+      {error && <p className="text-red-500 mb-4">{error}</p>}
+
+      <button
+        onClick={handleGenerate}
+        disabled={generating}
+        className="mb-4 bg-green-500 text-white px-4 py-2 rounded"
+      >
+        {generating ? '生成中...' : 'あらすじを自動生成'}
+      </button>
 
       <textarea
         value={summary}
         onChange={(e) => setSummary(e.target.value)}
-        className="w-full h-40 border p-2 rounded"
-        placeholder="記事の目的・全体像・読者のメリットを簡単にまとめましょう"
+        rows={6}
+        className="w-full border p-2 rounded mb-4"
+        placeholder="あらすじを入力または生成..."
       />
 
-      {error && <p className="text-red-500 mt-2">{error}</p>}
-
-      <div className="flex gap-4 mt-4">
-        {/* 戻るボタン */}
+      <div className="flex gap-4">
         <button
-          onClick={() => {
-            if (draftId) router.push(`/step2?id=${draftId}`)
-          }}
+          onClick={() => router.push(`/step2?id=${draftId}`)}
           className="bg-gray-400 text-white px-4 py-2 rounded"
         >
           ステップ2に戻る
         </button>
 
-        {/* 次へボタン */}
         <button
           onClick={handleNext}
           className="bg-blue-500 text-white px-4 py-2 rounded"

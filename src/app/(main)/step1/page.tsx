@@ -19,6 +19,11 @@ export default function BlogStep1Page() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
 
+  // 追加：自動提案ボタンのローディング状態
+  const [loadingKeyword, setLoadingKeyword] = useState(false)
+  const [loadingTitle, setLoadingTitle] = useState(false)
+  const [loadingAudience, setLoadingAudience] = useState(false)
+
   const [recommendSets, setRecommendSets] = useState<string[][]>([])
   const [showModal, setShowModal] = useState(false)
 
@@ -102,42 +107,92 @@ export default function BlogStep1Page() {
   }
 
   const handleRecommend = async () => {
-    setError('')
 
     if (!title || !audience) {
-        return setError('タイトルと想定読者を入力してください')
+      return setError('タイトルと想定読者を入力してください')
     }
-
+    setError('')
+    setLoadingKeyword(true)
     try {
-        const res = await fetch('/api/recommend/keywords', {
+      const res = await fetch('/api/recommend/keywords', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title, audience })
-        })
-        const data = await res.json()
-        if (!res.ok) {
-            throw new Error(data.error || 'キーワードの提案に失敗しました')
-        }
-        if (!data.result) {
-            throw new Error('結果が見つかりません')
-        }
-        // ChatGPTの回答はJSON文字列の可能性があるため、構文解析する
-        const parsed = JSON.parse(data.result)
-
-        if (!parsed.keyword_sets || !Array.isArray(parsed.keyword_sets)) {
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || 'キーワードの提案に失敗しました')
+      }
+      if (!data.result) {
+        throw new Error('結果が見つかりません')
+      }
+      const parsed = JSON.parse(data.result)
+      if (!parsed.keyword_sets || !Array.isArray(parsed.keyword_sets)) {
         throw new Error('形式が正しくありません')
-        }
-
-        setRecommendSets(parsed.keyword_sets)
-        setShowModal(true)
+      }
+      setRecommendSets(parsed.keyword_sets)
+      setShowModal(true)
     } catch (e) {
-        setError('キーワードの提案に失敗しました')
-        console.error(e)
+      setError('キーワードの提案に失敗しました')
+      console.error(e)
+    } finally {
+      setLoadingKeyword(false)
     }
-}
+  }
 
+  // 追加：タイトル自動提案
+  const generateTitle = async () => {
+    if (!audience.trim()) {
+      setError('先に想定読者を入力してください')
+      return
+    }
+    setError('')
+    setLoadingTitle(true)
+    try {
+      const res = await fetch('/api/recommend/title', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audience }),
+      })
+      const data = await res.json()
+      if (data.title) {
+        setTitle(data.title)
+      } else {
+        setError('タイトル提案に失敗しました')
+      }
+    } catch {
+      setError('タイトル提案APIエラー')
+    } finally {
+      setLoadingTitle(false)
+    }
+  }
 
-
+  // 追加：読者自動提案
+  const generateAudience = async () => {
+    if (!title.trim()) {
+      setError('先にブログタイトルを入力してください')
+      return
+    }
+    setError('')
+    setLoadingAudience(true)
+    try {
+      const res = await fetch('/api/recommend/audience', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title }),
+      })
+      const data = await res.json()
+      if (data.audience) {
+        setAudience(data.audience)
+      } else {
+        setError('読者提案に失敗しました')
+      }
+    } catch {
+      setError('読者提案APIエラー')
+    } finally {
+      setLoadingAudience(false)
+    }
+  }
 
   if (loading) return <p className="p-4">読み込み中...</p>
 
@@ -147,24 +202,42 @@ export default function BlogStep1Page() {
 
       <div className="mb-4">
         <label className="block font-medium mb-1">ブログタイトル</label>
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          className="w-full border p-2 rounded"
-          placeholder="例：初心者のための副業ブログの始め方"
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            className="flex-1 border p-2 rounded"
+            placeholder="例：初心者のための副業ブログの始め方"
+          />
+          <button
+            onClick={generateTitle}
+            disabled={loadingTitle}
+            className="bg-green-500 text-white px-3 rounded"
+          >
+            {loadingTitle ? '生成中...' : 'タイトル提案'}
+          </button>
+        </div>
       </div>
 
       <div className="mb-4">
         <label className="block font-medium mb-1">想定読者</label>
-        <input
-          type="text"
-          value={audience}
-          onChange={(e) => setAudience(e.target.value)}
-          className="w-full border p-2 rounded"
-          placeholder="例：副業に興味がある会社員"
-        />
+        <div className="flex gap-2">
+          <input
+            type="text"
+            value={audience}
+            onChange={(e) => setAudience(e.target.value)}
+            className="flex-1 border p-2 rounded"
+            placeholder="例：副業に興味がある会社員"
+          />
+          <button
+            onClick={generateAudience}
+            disabled={loadingAudience}
+            className="bg-green-500 text-white px-3 rounded"
+          >
+            {loadingAudience ? '生成中...' : '読者提案'}
+          </button>
+        </div>
       </div>
 
       <div className="mb-4">
@@ -179,52 +252,51 @@ export default function BlogStep1Page() {
             placeholder={`キーワード${i + 1}`}
           />
         ))}
-        {/* 「おすすめを生成」ボタン追加 */}  
+        {/* 「おすすめを生成」ボタン追加 */}
         <button
-            onClick={handleRecommend}
-            className="mb-4 bg-gray-300 text-black px-4 py-2 rounded"
-            >
-            おすすめのキーワードを生成
+          onClick={handleRecommend}
+          className="mb-4 bg-gray-300 text-black px-4 py-2 rounded"
+        >
+          {loadingKeyword ? '生成中...' : 'おすすめのキーワードを生成'}
         </button>
-
       </div>
 
       {error && <p className="text-red-500 mb-4">{error}</p>}
-        {showModal && (
+
+      {showModal && (
         <div
-            className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
-            onClick={() => setShowModal(false)} // 外側クリックで閉じる
+          className="fixed inset-0 bg-black/30 flex items-center justify-center z-50"
+          onClick={() => setShowModal(false)} // 外側クリックで閉じる
         >
-            <div
+          <div
             className="bg-white p-6 rounded-lg w-full max-w-lg shadow-lg"
             onClick={(e) => e.stopPropagation()} // 内側クリックは無視
-            >
+          >
             <h2 className="text-lg font-bold mb-4">おすすめのキーワード</h2>
             <p className="text-sm text-gray-500 mb-2">1セットをクリックして適用</p>
             <div className="space-y-2 max-h-80 overflow-y-auto">
-                {recommendSets.map((set, i) => (
+              {recommendSets.map((set, i) => (
                 <button
-                    key={i}
-                    onClick={() => {
+                  key={i}
+                  onClick={() => {
                     setKeywords(set)
                     setShowModal(false)
-                    }}
-                    className="w-full text-left border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded"
+                  }}
+                  className="w-full text-left border border-gray-300 hover:bg-gray-100 px-4 py-2 rounded"
                 >
-                    {set.join(' / ')}
+                  {set.join(' / ')}
                 </button>
-                ))}
+              ))}
             </div>
             <button
-                onClick={() => setShowModal(false)}
-                className="mt-4 text-sm bg-gray-300 text-black  rounded hover:bg-gray-200 px-4 py-2"
+              onClick={() => setShowModal(false)}
+              className="mt-4 text-sm bg-gray-300 text-black rounded hover:bg-gray-200 px-4 py-2"
             >
-                キャンセル
+              キャンセル
             </button>
-            </div>
+          </div>
         </div>
-        )}
-
+      )}
 
       <button onClick={handleNext} className="bg-blue-500 text-white px-4 py-2 rounded">
         次へ（ステップ2）
